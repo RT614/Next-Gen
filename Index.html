@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Escape Room Game</title>
+  https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js</script>
+  https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js
+  https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js
+  <style>
+    body { font-family: Arial; background: #111; color: #eee; padding: 20px; }
+    .container { max-width: 600px; margin: auto; }
+    input, button { padding: 10px; margin-top: 10px; width: 100%; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { border: 1px solid #444; padding: 8px; text-align: left; }
+    label { display: block; margin: 5px 0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Escape the Haunted Laboratory</h1>
+    <input type="text" id="playerName" placeholder="Enter your name" />
+    <button onclick="startGame()">Start Game</button>
+    <div id="questionArea" style="display:none;"></div>
+    <div id="leaderboard" style="display:none;">
+      <h2>Leaderboard</h2>
+      <table>
+        <thead><tr><th>Name</th><th>Correct</th><th>Time</th><th>Timestamp</th></tr></thead>
+        <tbody id="leaderboardBody"></tbody>
+      </table>
+      <button onclick="downloadExcel()">Download Leaderboard</button>
+    </div>
+  </div>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyCStkkcfJC6ZS3JU_XwnX5t2WJTPQhU98c",
+      authDomain: "escaperoomleaderboard.firebaseapp.com",
+      projectId: "escaperoomleaderboard",
+      storageBucket: "escaperoomleaderboard.firebasestorage.app",
+      messagingSenderId: "567361246515",
+      appId: "1:567361246515:web:2a875e97aca14c922a5a46"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    const questions = [
+      { q: "Which iPhone introduces the first square front camera sensor with Center Stage?", options: ["iPhone 17", "iPhone Air", "iPhone 17 Pro", "iPhone 17 Pro Max"], a: "iPhone 17" },
+      { q: "What is the max resolution of the iPhone 17 front camera?", options: ["12MP", "16MP", "18MP", "20MP"], a: "18MP" },
+      { q: "Which iPhone has a 6.5-inch display and titanium frame?", options: ["iPhone 17", "iPhone Air", "iPhone 17 Pro", "iPhone 17 Pro Max"], a: "iPhone Air" },
+      { q: "What chip powers the iPhone Air?", options: ["A18", "A19 Pro", "A17 Bionic", "M1"], a: "A19 Pro" },
+      { q: "Which iPhone supports Dual Capture video?", options: ["iPhone 17", "iPhone Air", "iPhone 17 Pro", "iPhone 17 Pro Max"], a: "iPhone Air" },
+      { q: "What is the refresh rate of the iPhone 17 display?", options: ["60Hz", "90Hz", "120Hz", "144Hz"], a: "120Hz" },
+      { q: "Which iPhone has a vapor chamber cooling system?", options: ["iPhone 17", "iPhone Air", "iPhone 17 Pro", "iPhone 17 Pro Max"], a: "iPhone 17 Pro" },
+      { q: "What is the starting price of iPhone 17 Pro 256GB?", options: ["$999.99", "$1,099.99", "$1,199.99", "$1,299.99"], a: "$1,099.99" },
+      { q: "Which Apple Watch is the newest Ultra model?", options: ["Apple Watch Series 11", "Apple Watch SE3", "Apple Watch Ultra 3", "Apple Watch Ultra 2"], a: "Apple Watch Ultra 3" },
+      { q: "Which AirPods model was announced?", options: ["AirPods 2", "AirPods Pro 2", "AirPods Pro 3", "AirPods Max"], a: "AirPods Pro 3" }
+    ];
+
+    let current = 0, correct = 0, startTime;
+
+    function startGame() {
+      const name = document.getElementById("playerName").value;
+      if (!name) return alert("Enter your name");
+      startTime = new Date();
+      document.getElementById("game").style.display = "none";
+      document.getElementById("questionArea").style.display = "block";
+      showQuestion();
+    }
+
+    function showQuestion() {
+      const q = questions[current];
+      let html = `<p><strong>Question ${current + 1}:</strong> ${q.q}</p>`;
+      q.options.forEach((opt, i) => {
+        html += `<label><input type="radio" name="answer" value="${opt}"> ${String.fromCharCode(65 + i)}. ${opt}</label>`;
+      });
+      html += `<button onclick="submitAnswer()">Submit</button>`;
+      document.getElementById("questionArea").innerHTML = html;
+    }
+
+    function submitAnswer() {
+      const selected = document.querySelector("input[name='answer']:checked");
+      if (!selected) return alert("Select an answer");
+      if (selected.value === questions[current].a) correct++;
+      current++;
+      if (current < questions.length) showQuestion();
+      else endGame();
+    }
+
+    function endGame() {
+      const endTime = new Date();
+      const timeTaken = new Date(endTime - startTime).toISOString().substr(11, 8);
+      const timestamp = endTime.toLocaleString();
+      const name = document.getElementById("playerName").value;
+      db.collection("leaderboard").add({ name, correct, timeTaken, timestamp }).then(displayLeaderboard);
+    }
+
+    function displayLeaderboard() {
+      document.getElementById("questionArea").style.display = "none";
+      document.getElementById("leaderboard").style.display = "block";
+      const tbody = document.getElementById("leaderboardBody");
+      tbody.innerHTML = "";
+      db.collection("leaderboard").orderBy("correct", "desc").get().then(snapshot => {
+        snapshot.forEach(doc => {
+          const entry = doc.data();
+          tbody.innerHTML += `<tr><td>${entry.name}</td><td>${entry.correct}</td><td>${entry.timeTaken}</td><td>${entry.timestamp}</td></tr>`;
+        });
+      });
+    }
+
+    function downloadExcel() {
+      db.collection("leaderboard").get().then(snapshot => {
+        const data = [];
+        snapshot.forEach(doc => data.push(doc.data()));
+        const worksheet = XLSX.utils.json_to_sheet(data);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Leaderboard");
+        XLSX.writeFile(workbook, "escape_room_leaderboard.xlsx");
+      });
+    }
+  </script>
+</body>
+</html>
